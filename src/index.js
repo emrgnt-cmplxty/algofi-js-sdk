@@ -1,8 +1,37 @@
 import algosdk from "algosdk"
-import { getParams, waitForConfirmation, getCore } from "./utils.js"
+import { getParams, waitForConfirmation, getCore } from "./submissionUtils.js"
 export { getParams, waitForConfirmation }
-import { orderedAssets, managerAppId, assetDictionary, orderedOracleAppIds, orderedMarketAppIds } from "./config.js"
-export { orderedAssets, managerAppId, assetDictionary, orderedOracleAppIds, orderedMarketAppIds }
+import {
+  getPriceInfo,
+  getBalanceInfo,
+  getStorageAddress,
+  getGlobalMarketInfo,
+  extrapolateMarketData,
+  getUserMarketData,
+  extrapolateUserData,
+} from "./stateUtils.js"
+import {
+  orderedAssets,
+  managerAppId,
+  assetDictionary,
+  orderedOracleAppIds,
+  orderedMarketAppIds,
+  SECONDS_PER_YEAR,
+  RESERVE_RATIO,
+  SCALE_FACTOR,
+  CREATOR_ADDRESS,
+} from "./config.js"
+export {
+  orderedAssets,
+  managerAppId,
+  assetDictionary,
+  orderedOracleAppIds,
+  orderedMarketAppIds,
+  SECONDS_PER_YEAR,
+  RESERVE_RATIO,
+  SCALE_FACTOR,
+  CREATOR_ADDRESS,
+}
 
 export async function optInMarkets(algodClient, address) {
   const params = await getParams(algodClient)
@@ -262,4 +291,53 @@ export async function liquidate(algodClient, address, storageAddress, liquidateS
   )
   algosdk.assignGroupID(txns)
   return txns
+}
+
+export async function getUserAndProtocolData(algodClient, address) {
+  let userResults = {}
+  let globalResults = {}
+
+  let currentUnixTime = Date.now()
+  currentUnixTime = Math.floor(currentUnixTime / 1000)
+  let accountInfo = await algodClient.accountInformation(address).do()
+  //  let globalInfo = await algodClient.accountInformation(CREATOR_ADDRESS).do()
+
+  let storageAccount = await getStorageAddress(accountInfo)
+  userResults["storageAccount"] = storageAccount
+  let storageAccountInfo = await algodClient.accountInformation(storageAccount).do()
+  let balances = await getBalanceInfo(algodClient, address)
+  let prices = await getPriceInfo(algodClient)
+  for (const assetName of orderedAssets) {
+    userResults[assetName] = {
+      minted: 0,
+      borrowed: 0,
+      collateral: 0,
+      initial_index: 0,
+      supplied_underlying: 0,
+      borrowed_current_extrapolated: 0,
+      balance: 0,
+    }
+    userResults["b" + assetName] = { balance: 0 }
+
+    let userData = await getUserMarketData(storageAccountInfo, assetName)
+    let globalData = await getGlobalMarketInfo(algodClient, assetDictionary[assetName]["marketAppId"])
+
+    if (Object.keys(globalData).length > 0) {
+      globalResults[assetName] = globalData
+      let globalExtrpolatedData = await extrapolateMarketData(globalData)
+      globalResults[assetName] = Object.assign({}, globalResults[assetName], globalExtrpolatedData)
+      globalData["price"] = prices[assetName]
+      globalData["underlying_supplied"] = globalData["underlying_cash"] + globalData["underlying_borrowed"]
+    }
+    if (Object.keys(userData).length > 0) {
+      userResults[assetName] = userData
+      userResults[assetName]["balance"] = balances[assetName]
+      userResults["b" + assetName]["balance"] = balances["b" + assetName]
+    }
+    if (Object.keys(userData).length > 0 && Object.keys(globalData).length > 0) {
+      let userExtrapolatedData = await extrapolateUserData(userData, globalData)
+      userResults[assetName] = Object.assign({}, userResults[assetName], userExtrapolatedData)
+    }
+  }
+  return [userResults, globalResults]
 }
