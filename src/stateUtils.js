@@ -51,7 +51,7 @@ export async function getStorageAddress(accountInfo) {
   let localManager = accountInfo["apps-local-state"].filter((x) => {
     return x.id === managerAppId && x["key-value"]
   })
-
+  console.log("localManager=", localManager)
   if (localManager && localManager.length > 0) {
     let storageAccountBytes = localManager[0]["key-value"].filter((x) => {
       return x.key == "dXNlcl9zdG9yYWdlX2FkZHJlc3M="

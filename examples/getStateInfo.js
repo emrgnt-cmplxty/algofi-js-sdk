@@ -12,7 +12,8 @@ async function run() {
   console.log("PRIMARY ACCOUNT ADDRESS=", primaryAccount.addr)
 
   console.log("FETCHING DATA")
-  let userAndProtocolData = await algofi.getUserAndProtocolData(algodClient, primaryAccount.addr)
+  address = "D56FXYNZ6S3TMTAOGLBQCOSPW4QBFM6FOVCEX4L2TPPDFGTM67HCGMXXPQ"
+  let userAndProtocolData = await algofi.getUserAndProtocolData(algodClient, address)
   console.log("userAndProtocolData=", userAndProtocolData)
 }
 

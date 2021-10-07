@@ -304,12 +304,14 @@ export async function getUserAndProtocolData(algodClient, address) {
 
   let storageAccount = await getStorageAddress(accountInfo)
   userResults["storageAccount"] = storageAccount
-  let storageAccountInfo = await algodClient.accountInformation(storageAccount).do()
+  let storageAccountInfo = null
+  if (storageAccount) {
+    storageAccountInfo = await algodClient.accountInformation(storageAccount).do()
+  }
   let balances = await getBalanceInfo(algodClient, address)
   let prices = await getPriceInfo(algodClient)
   for (const assetName of orderedAssets) {
     userResults[assetName] = {
-      minted: 0,
       borrowed: 0,
       collateral: 0,
       initial_index: 0,
@@ -317,24 +319,31 @@ export async function getUserAndProtocolData(algodClient, address) {
       borrowed_current_extrapolated: 0,
       balance: 0,
     }
-    userResults["b" + assetName] = { balance: 0 }
+    userResults["b" + assetName] = { balance: 0, minted: 0 }
 
-    let userData = await getUserMarketData(storageAccountInfo, assetName)
+    let userData = null
+    if (storageAccount) {
+      userData = await getUserMarketData(storageAccountInfo, assetName)
+    }
+
     let globalData = await getGlobalMarketInfo(algodClient, assetDictionary[assetName]["marketAppId"])
 
-    if (Object.keys(globalData).length > 0) {
+    if (globalData && Object.keys(globalData).length > 0) {
       globalResults[assetName] = globalData
       let globalExtrpolatedData = await extrapolateMarketData(globalData)
       globalResults[assetName] = Object.assign({}, globalResults[assetName], globalExtrpolatedData)
       globalData["price"] = prices[assetName]
       globalData["underlying_supplied"] = globalData["underlying_cash"] + globalData["underlying_borrowed"]
     }
-    if (Object.keys(userData).length > 0) {
+
+    if (userData && Object.keys(userData).length > 0) {
       userResults[assetName] = userData
       userResults[assetName]["balance"] = balances[assetName]
       userResults["b" + assetName]["balance"] = balances["b" + assetName]
+      userResults["b" + assetName]["minted"] = userResults[assetName]["minted"]
+      delete userResults[assetName]["minted"]
     }
-    if (Object.keys(userData).length > 0 && Object.keys(globalData).length > 0) {
+    if (globalData && userData && Object.keys(userData).length > 0 && Object.keys(globalData).length > 0) {
       let userExtrapolatedData = await extrapolateUserData(userData, globalData)
       userResults[assetName] = Object.assign({}, userResults[assetName], userExtrapolatedData)
     }
